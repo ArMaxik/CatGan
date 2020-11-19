@@ -38,17 +38,15 @@ class CatGAN:
         self.LATENT = 100
         self.ISIZE = 64
         self.DEVICE = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
+        self.DATA_PATH = "/home/v-eliseev/Datasets/cats/"
 
         self.EPOCHS = 4
 
-        self.dataloader = makeCatsDataset(path='/mnt/p/datasets/cats/', batch=self.BATCH)
+        self.dataloader = makeCatsDataset(path=self.DATA_PATH, batch=self.BATCH)
         self.gen = Generator(self.LATENT).to(self.DEVICE)
         self.dis = Discriminator().to(self.DEVICE)
         self.gen.apply(weights_init)
         self.dis.apply(weights_init)
-
-        self.save_folder = os.path.join('./out', self.EXP_NAME + '/')
-        self.init_folder()
 
     def train_discriminator(self):
         self.op_dis.zero_grad()
@@ -119,6 +117,11 @@ class CatGAN:
 
 
     def train(self):
+        self.save_folder = os.path.join('./out', self.EXP_NAME + '/')
+        self.init_folder()
+        
+        print("Strated {}\nEpochs: {}\nDevice: {}".format(self.EXP_NAME, self.EPOCHS, self.DEVICE))
+        
         self.fixed_noise = torch.randn(36, self.LATENT, device=self.DEVICE)
         self.img_list = []
         self.G_losses = []
@@ -164,6 +167,11 @@ class CatGAN:
         plt.legend()
         plt.savefig(self.save_folder + "losses.png")
         plt.close()
+
+        noise = torch.randn(64, self.LATENT, device=self.DEVICE)
+        with torch.no_grad():
+            fake = self.gen(noise).detach().cpu()
+        vutils.save_image(fake, self.save_folder + "final.png")
 
     def save_video(self):
         fig = plt.figure(figsize=(12,12))

@@ -52,5 +52,5 @@ def makeCatsDataset(batch=16, path=DATA_DIR):
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ]))
-    dataloader = DataLoader(cats_dataset, batch_size=batch, shuffle=True, num_workers=0)
+    dataloader = DataLoader(cats_dataset, batch_size=batch, shuffle=True, num_workers=4)
     return dataloader

@@ -32,7 +32,7 @@ def image_with_title(img, title_text, info_text):
     img_n = plt.imshow(np.transpose(img,(1,2,0)), animated=True);
     return [img_n, title]
 
-dataloader = data.makeCatsDataset(path='/mnt/p/datasets/cats/', batch=16)
+dataloader = data.makeCatsDataset(path="/home/v-eliseev/Datasets/cats/", batch=16)
 
 img_list = []
 for i_batch, im in enumerate(dataloader):
@@ -55,7 +55,7 @@ ani = animation.ArtistAnimation(fig, ims, interval=750, repeat_delay=1000, blit=
 
 Writer = animation.writers['ffmpeg']
 writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
-ani.save('test.mp4', writer=writer)
+# ani.save('test.mp4', writer=writer)
 
 
 LATENT = 100
@@ -69,6 +69,6 @@ dis.apply(weights_init)
 data = gen(torch.randn(16, LATENT).cuda()).cpu()
 fig, ax = plt.subplots()
 fig.dpi = 250
-imshow(torchvision.utils.make_grid((data.detach()+1)/2, nrow=4), name='test')
+# imshow(torchvision.utils.make_grid((data.detach()+1)/2, nrow=4), name='test')
 print(dis(data.cuda()).detach())
 plt.close()
