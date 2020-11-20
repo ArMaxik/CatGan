@@ -19,7 +19,7 @@ import os
 
 
 
-class CatGAN:
+class DCGAN:
     def __init__(self, opt):
         self.exp_name = opt.exp_name
         self.batch = opt.batch
@@ -33,6 +33,8 @@ class CatGAN:
         self.lr_g = opt.lr_g
         self.lr_decay_epoch = opt.lr_decay_epoch
         self.lr_decay_factor = opt.lr_decay_factor
+        self.g_it = opt.g_it
+        self.d_it = opt.d_it
         self.noise = opt.noise
 
         self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch)
@@ -95,8 +97,11 @@ class CatGAN:
             if self.noise:
                 self.data_device = noisy(self.data_device, self.device)
 
-            self.train_discriminator()
-            self.train_generator()
+            mini_it = i % (self.g_it + self.d_it)
+            if mini_it < self.d_it:
+                self.train_discriminator()
+            if mini_it >= self.d_it:
+                self.train_generator()
 
             self.pbar.update()
             
@@ -109,13 +114,7 @@ class CatGAN:
         self.G_losses.append(self.g_loss.item())
         self.D_losses.append(self.d_loss.item())
 
-
-    def train(self):
-        self.save_folder = os.path.join('./out', self.exp_name + '/')
-        self.init_folder()
-
-        print("Strated {}\nepochs: {}\ndevice: {}".format(self.exp_name, self.epochs, self.device))
-        
+    def setup_train(self):
         self.fixed_noise = torch.randn(36, self.latent, device=self.device)
         self.img_list = []
         self.G_losses = []
@@ -123,12 +122,20 @@ class CatGAN:
         self.real_label = 0.9
         self.fake_label = 0.0
 
-        lr_dec_i = 0
-
         self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(0.5, 0.999))
         self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(0.5, 0.999)) 
         self.criterion = nn.BCELoss()
         # self.criterion = nn.MSELoss()
+
+    def train(self):
+        self.save_folder = os.path.join('./out', self.exp_name + '/')
+        self.init_folder()
+
+        print("Strated {}\nepochs: {}\ndevice: {}".format(self.exp_name, self.epochs, self.device))
+        
+        self.setup_train()
+
+        lr_dec_i = 0
 
         self.pbar = tqdm()
         self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
@@ -148,9 +155,10 @@ class CatGAN:
                 self.d_loss.item(), self.g_loss.item(),
                 self.D_x, self.D_G_z1, self.D_G_z2
                 ))
-        self.make_chart()
+            self.make_chart()
+            self.save_weights()
+
         self.save_video()
-        self.save_weights()
 
     def make_chart(self):
         plt.figure(figsize=(10,5))
@@ -191,3 +199,80 @@ class CatGAN:
     def init_folder(self):
         if not os.path.isdir(self.save_folder):
             os.makedirs(self.save_folder)
+
+
+class WGAN_GP(DCGAN):
+    def __init__(self, opt):
+        super().__init__(opt)
+
+        self.lambda_coff = opt.lambda_coff
+
+    def gradien_penalty(self, imgs_real, imgs_fake):
+        epsilon = torch.rand(self.batch, device=self.device)
+        interpolate = epsilon*imgs_real + (1.0 - epsilon)*imgs_fake
+        interpolate.requires_grad_(True)
+        
+        d_interpolate = self.dis(interpolate)
+
+        gradients = torch.autograd.grad(
+            outputs=d_interpolate,
+            inputs=interpolate,
+            grad_outputs=torch.ones(d_interpolate.shape, device=self.device),
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+        gradients = gradients.view(self.batch, -1)
+
+        penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        return self.lambda_coff*penalty
+
+    def train_discriminator(self):
+        self.op_dis.zero_grad()
+        # True
+        imgs_real = self.data_device
+
+        output_real = self.dis(imgs_real).view(-1)
+
+        self.D_x = output_real.mean().item()
+
+        # False
+        z = torch.randn(self.data_device.size()[0], self.latent, device=self.device)
+        imgs_fake = self.gen(z)
+
+        output_fake = self.dis(imgs_fake).view(-1)
+
+        self.d_loss = output_fake.mean() - output_real.mean() + self.gradien_penalty(imgs_real, imgs_fake)
+        self.d_loss.backward()
+
+        self.D_G_z1 = output_fake.mean().item()
+
+        self.op_dis.step()
+
+    def train_generator(self):
+        self.op_gen.zero_grad()
+
+        z = torch.randn(self.data_device.size()[0], self.latent, device=self.device)
+
+        imgs = self.gen(z)
+        if self.noise:
+            imgs = noisy(imgs, self.device)
+
+        output_fake = self.dis(imgs).mean()
+        
+        self.g_loss = -output_fake
+        self.g_loss.backward()
+
+        self.op_gen.step()
+        self.D_G_z2 = output_fake.mean().item()
+
+    def setup_train(self):
+        self.fixed_noise = torch.randn(36, self.latent, device=self.device)
+        self.img_list = []
+        self.G_losses = []
+        self.D_losses = []
+
+        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(0.5, 0.999))
+        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(0.5, 0.999)) 
+        self.criterion = nn.BCELoss()
+        # self.criterion = nn.MSELoss()
