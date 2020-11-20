@@ -32,19 +32,21 @@ def image_with_title(img, title_text, info_text):
     return [img_n, title]
 
 class CatGAN:
-    def __init__(self):
-        self.EXP_NAME = "CatGAN_1"
-        self.BATCH = 64
-        self.LATENT = 100
-        self.ISIZE = 64
-        self.DEVICE = torch.device("cuda:0" if (torch.cuda.is_available()) else "cpu")
-        self.DATA_PATH = "/home/v-eliseev/Datasets/cats/"
+    def __init__(self, opt):
+        self.exp_name = opt.exp_name
+        self.batch = opt.batch
+        self.latent = opt.latent
+        self.isize = opt.isize
+        self.device = opt.device
+        self.data_path = opt.data_path
 
-        self.EPOCHS = 4
+        self.epochs = opt.epochs
+        self.lr_d = opt.lr_d
+        self.lr_g = opt.lr_g
 
-        self.dataloader = makeCatsDataset(path=self.DATA_PATH, batch=self.BATCH)
-        self.gen = Generator(self.LATENT).to(self.DEVICE)
-        self.dis = Discriminator().to(self.DEVICE)
+        self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch)
+        self.gen = Generator(self.latent).to(self.device)
+        self.dis = Discriminator().to(self.device)
         self.gen.apply(weights_init)
         self.dis.apply(weights_init)
 
@@ -52,24 +54,24 @@ class CatGAN:
         self.op_dis.zero_grad()
         # True
 
-#             imgs = noisy(data_device, device=self.DEVICE)
+#             imgs = noisy(data_device, device=self.device)
         imgs = self.data_device
 
         output_real = self.dis(imgs).view(-1)
 
-        label_real = torch.full((output_real.size()[0],), self.real_label, device=self.DEVICE) 
+        label_real = torch.full((output_real.size()[0],), self.real_label, device=self.device) 
         self.D_x = output_real.mean().item()
 
         # False
-        z = torch.randn(imgs.size()[0], self.LATENT, device=self.DEVICE)
+        z = torch.randn(imgs.size()[0], self.latent, device=self.device)
         imgs = self.gen(z)
-#             imgs = noisy(imgs, device=self.DEVICE)
+#             imgs = noisy(imgs, device=self.device)
 
         output_fake = self.dis(imgs).view(-1)
-        label_fake = torch.full((output_fake.size()[0],), self.fake_label, device=self.DEVICE)
+        label_fake = torch.full((output_fake.size()[0],), self.fake_label, device=self.device)
 
-        real_loss = self.criterion(output_real-output_fake, label_real)
-        fake_loss = self.criterion(output_fake-output_real, label_fake)
+        real_loss = self.criterion(output_real, label_real)
+        fake_loss = self.criterion(output_fake, label_fake)
 
         self.d_loss = (real_loss + fake_loss) / 2
         self.d_loss.backward()
@@ -84,14 +86,12 @@ class CatGAN:
 #             imgs = noisy(data_device, device=device)
         imgs = self.data_device
 
-        output_real = self.dis(imgs).view(-1)
-
-        z = torch.randn(imgs.size()[0], self.LATENT, device=self.DEVICE)
+        z = torch.randn(imgs.size()[0], self.latent, device=self.device)
         output_fake = self.dis(self.gen(z)).view(-1)
 
-        label_g = torch.full((output_fake.size()[0],), self.real_label, device=self.DEVICE) 
+        label_g = torch.full((output_fake.size()[0],), self.real_label, device=self.device) 
         
-        self.g_loss = self.criterion(output_fake-output_real, label_g)
+        self.g_loss = self.criterion(output_fake, label_g)
         self.g_loss.backward()
 
         self.op_gen.step()
@@ -99,7 +99,7 @@ class CatGAN:
     
     def train_one_epoch(self):
         for i, data in enumerate(self.dataloader, 0):
-            self.data_device = data.to(self.DEVICE)
+            self.data_device = data.to(self.device)
 
             self.train_discriminator()
             self.train_generator()
@@ -117,39 +117,39 @@ class CatGAN:
 
 
     def train(self):
-        self.save_folder = os.path.join('./out', self.EXP_NAME + '/')
+        self.save_folder = os.path.join('./out', self.exp_name + '/')
         self.init_folder()
+
+        print("Strated {}\nepochs: {}\ndevice: {}".format(self.exp_name, self.epochs, self.device))
         
-        print("Strated {}\nEpochs: {}\nDevice: {}".format(self.EXP_NAME, self.EPOCHS, self.DEVICE))
-        
-        self.fixed_noise = torch.randn(36, self.LATENT, device=self.DEVICE)
+        self.fixed_noise = torch.randn(36, self.latent, device=self.device)
         self.img_list = []
         self.G_losses = []
         self.D_losses = []
         self.real_label = 0.9
         self.fake_label = 0.0
 
-        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=0.0001, betas=(0.5, 0.999))
-        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=0.0001, betas=(0.5, 0.999)) 
-        # criterion = nn.BCELoss()
-        self.criterion = nn.BCEWithLogitsLoss()
+        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(0.5, 0.999))
+        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(0.5, 0.999)) 
+        self.criterion = nn.BCELoss()
+        # self.criterion = nn.BCEWithLogitsLoss()
 
         self.pbar = tqdm()
-        self.pbar.reset(total=self.EPOCHS*len(self.dataloader))  # initialise with new `total`
+        self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
 
-        for epoch in range(self.EPOCHS):
-            if epoch == 25:
-                self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=0.00001, betas=(0.5, 0.999))
-                self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=0.00001, betas=(0.5, 0.999))
-            if epoch == 50:
-                self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=0.000001, betas=(0.5, 0.999))
-                self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=0.000001, betas=(0.5, 0.999))
+        for epoch in range(self.epochs):
+            # if epoch == 25:
+            #     self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=0.00001, betas=(0.5, 0.999))
+            #     self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=0.00001, betas=(0.5, 0.999))
+            # if epoch == 50:
+            #     self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=0.000001, betas=(0.5, 0.999))
+            #     self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=0.000001, betas=(0.5, 0.999))
             
             self.train_one_epoch()
             self.make_stats()
 
             print('[{:3d}/{:d}] Loss_D: {:.4f}  Loss_G: {:.4f} | D(x): {:.4f}  D(G(z)): {:.4f} / {:.4f}'.format(
-                epoch, self.EPOCHS-1,
+                epoch, self.epochs-1,
                 self.d_loss.item(), self.g_loss.item(),
                 sigmoid(self.D_x), sigmoid(self.D_G_z1), sigmoid(self.D_G_z2)
                 ))
@@ -168,17 +168,17 @@ class CatGAN:
         plt.savefig(self.save_folder + "losses.png")
         plt.close()
 
-        noise = torch.randn(64, self.LATENT, device=self.DEVICE)
+        noise = torch.randn(64, self.latent, device=self.device)
         with torch.no_grad():
             fake = self.gen(noise).detach().cpu()
-        vutils.save_image(fake, self.save_folder + "final.png")
+        vutils.save_image(fake, self.save_folder + "final.png", normalize=True)
 
     def save_video(self):
         fig = plt.figure(figsize=(12,12))
         ims = [
             image_with_title(img,
                             "Epoch: {}".format(i),
-                            "[RGAN] Batch size: {0}, Latent space: {1}, size {2}x{2}".format(self.BATCH, self.LATENT, 32))
+                            "[RGAN] batch size: {0}, latent space: {1}, size {2}x{2}".format(self.batch, self.latent, 32))
             for i, img in enumerate(self.img_list)
             ]
         ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
