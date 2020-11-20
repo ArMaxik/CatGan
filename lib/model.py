@@ -15,9 +15,6 @@ import numpy as np
 from tqdm import tqdm
 import os
 
-def sigmoid(x):
-    return 1 / (1 + math.exp(-x))
-
 def image_with_title(img, title_text, info_text):
     plt.axis('off')
     title = plt.text(0,-7,
@@ -43,6 +40,8 @@ class CatGAN:
         self.epochs = opt.epochs
         self.lr_d = opt.lr_d
         self.lr_g = opt.lr_g
+        self.lr_decay_epoch = opt.lr_decay_epoch
+        self.lr_decay_factor = opt.lr_decay_factor
 
         self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch)
         self.gen = Generator(self.latent).to(self.device)
@@ -129,21 +128,21 @@ class CatGAN:
         self.real_label = 0.9
         self.fake_label = 0.0
 
+        lr_dec_i = 0
+
         self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(0.5, 0.999))
         self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(0.5, 0.999)) 
         self.criterion = nn.BCELoss()
-        # self.criterion = nn.BCEWithLogitsLoss()
 
         self.pbar = tqdm()
         self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
 
         for epoch in range(self.epochs):
-            # if epoch == 25:
-            #     self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=0.00001, betas=(0.5, 0.999))
-            #     self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=0.00001, betas=(0.5, 0.999))
-            # if epoch == 50:
-            #     self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=0.000001, betas=(0.5, 0.999))
-            #     self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=0.000001, betas=(0.5, 0.999))
+            if lr_dec_i < len(self.lr_decay_epoch):
+                if epoch == self.lr_decay_epoch[lr_dec_i]:
+                    self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g/self.lr_decay_factor, betas=(0.5, 0.999))
+                    self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d/self.lr_decay_factor, betas=(0.5, 0.999))
+                    lr_dec_i += 1
             
             self.train_one_epoch()
             self.make_stats()
@@ -151,7 +150,7 @@ class CatGAN:
             print('[{:3d}/{:d}] Loss_D: {:.4f}  Loss_G: {:.4f} | D(x): {:.4f}  D(G(z)): {:.4f} / {:.4f}'.format(
                 epoch, self.epochs-1,
                 self.d_loss.item(), self.g_loss.item(),
-                sigmoid(self.D_x), sigmoid(self.D_G_z1), sigmoid(self.D_G_z2)
+                self.D_x, self.D_G_z1, self.D_G_z2
                 ))
         self.make_chart()
         self.save_video()
@@ -162,7 +161,7 @@ class CatGAN:
         plt.title("Generator and Discriminator Loss During Training")
         plt.plot(self.G_losses,label="G")
         plt.plot(self.D_losses,label="D")
-        plt.xlabel("iterations")
+        plt.xlabel("Epoch")
         plt.ylabel("Loss")
         plt.legend()
         plt.savefig(self.save_folder + "losses.png")
