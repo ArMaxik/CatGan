@@ -5,6 +5,7 @@ import matplotlib.animation as animation
 
 import data
 from networks import *
+from misc import *
 
 def imshow(img, name=None):
     fig, ax = plt.subplots()
@@ -36,11 +37,12 @@ dataloader = data.makeCatsDataset(path="/home/v-eliseev/Datasets/cats/", batch=1
 
 img_list = []
 for i_batch, im in enumerate(dataloader):
+    im = noisy(im)
     im = (im+1.0)/2.0
     
-    # imshow(torchvision.utils.make_grid(im, nrow=4), name=str(i_batch))
+    imshow(torchvision.utils.make_grid(im, nrow=4), name=str(i_batch))
     img_list.append(torchvision.utils.make_grid(im, nrow=4))
-    if i_batch == 25:
+    if i_batch == 0:
         break
 
 fig = plt.figure(figsize=(12,12))

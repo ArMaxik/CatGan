@@ -10,23 +10,14 @@ import matplotlib.animation as animation
 from lib.data import makeCatsDataset
 from lib.networks import Generator, Discriminator, weights_init
 
+from lib.misc import noisy, image_with_title
+
 import math
 import numpy as np
 from tqdm import tqdm
 import os
 
-def image_with_title(img, title_text, info_text):
-    plt.axis('off')
-    title = plt.text(0,-7,
-                    title_text, 
-                    fontsize=26)
-    title.set_bbox(dict(facecolor='white', alpha=1.0, edgecolor='white'))
-    # info = plt.text(0,32*6+22,
-    #                 info_text, 
-    #                 fontsize=14)
-    # info.set_bbox(dict(facecolor='white', alpha=1.0, edgecolor='white'))
-    img_n = plt.imshow(np.transpose(img,(1,2,0)), animated=True)
-    return [img_n, title]
+
 
 class CatGAN:
     def __init__(self, opt):
@@ -42,6 +33,7 @@ class CatGAN:
         self.lr_g = opt.lr_g
         self.lr_decay_epoch = opt.lr_decay_epoch
         self.lr_decay_factor = opt.lr_decay_factor
+        self.noise = opt.noise
 
         self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch)
         self.gen = Generator(self.latent).to(self.device)
@@ -52,8 +44,6 @@ class CatGAN:
     def train_discriminator(self):
         self.op_dis.zero_grad()
         # True
-
-#             imgs = noisy(data_device, device=self.device)
         imgs = self.data_device
 
         output_real = self.dis(imgs).view(-1)
@@ -64,7 +54,8 @@ class CatGAN:
         # False
         z = torch.randn(imgs.size()[0], self.latent, device=self.device)
         imgs = self.gen(z)
-#             imgs = noisy(imgs, device=self.device)
+        if self.noise:
+            imgs = noisy(imgs, self.device)
 
         output_fake = self.dis(imgs).view(-1)
         label_fake = torch.full((output_fake.size()[0],), self.fake_label, device=self.device)
@@ -82,11 +73,13 @@ class CatGAN:
     def train_generator(self):
         self.op_gen.zero_grad()
 
-#             imgs = noisy(data_device, device=device)
-        imgs = self.data_device
+        z = torch.randn(self.data_device.size()[0], self.latent, device=self.device)
 
-        z = torch.randn(imgs.size()[0], self.latent, device=self.device)
-        output_fake = self.dis(self.gen(z)).view(-1)
+        imgs = self.gen(z)
+        if self.noise:
+            imgs = noisy(imgs, self.device)
+
+        output_fake = self.dis(imgs).view(-1)
 
         label_g = torch.full((output_fake.size()[0],), self.real_label, device=self.device) 
         
@@ -99,6 +92,8 @@ class CatGAN:
     def train_one_epoch(self):
         for i, data in enumerate(self.dataloader, 0):
             self.data_device = data.to(self.device)
+            if self.noise:
+                self.data_device = noisy(self.data_device, self.device)
 
             self.train_discriminator()
             self.train_generator()
@@ -133,6 +128,7 @@ class CatGAN:
         self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(0.5, 0.999))
         self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(0.5, 0.999)) 
         self.criterion = nn.BCELoss()
+        # self.criterion = nn.MSELoss()
 
         self.pbar = tqdm()
         self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
@@ -140,8 +136,8 @@ class CatGAN:
         for epoch in range(self.epochs):
             if lr_dec_i < len(self.lr_decay_epoch):
                 if epoch == self.lr_decay_epoch[lr_dec_i]:
-                    self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g/self.lr_decay_factor, betas=(0.5, 0.999))
-                    self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d/self.lr_decay_factor, betas=(0.5, 0.999))
+                    self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g/(self.lr_decay_factor**lr_dec_i), betas=(0.5, 0.999))
+                    self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d/(self.lr_decay_factor**lr_dec_i), betas=(0.5, 0.999))
                     lr_dec_i += 1
             
             self.train_one_epoch()
@@ -183,7 +179,7 @@ class CatGAN:
         ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
         
         Writer = animation.writers['ffmpeg']
-        writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+        writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=3500)
         ani.save(self.save_folder + 'hist.mp4', writer=writer)
 
     def save_weights(self):
