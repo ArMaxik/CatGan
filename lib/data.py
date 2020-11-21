@@ -37,7 +37,7 @@ class CatsDataset(Dataset):
 
 
 DATA_DIR = "/home/v-eliseev/Datasets/cats/"
-def makeCatsDataset(batch=16, path=DATA_DIR):
+def makeCatsDataset(batch=16, isize=64, path=DATA_DIR):
     cats_dataset = CatsDataset(
         index_file = path+"faces_index.txt",
         img_dir = path+"faces/",
@@ -47,10 +47,10 @@ def makeCatsDataset(batch=16, path=DATA_DIR):
                 degrees = 35
             ),
             transforms.CenterCrop((128,128)),
-            transforms.Resize((64,64)),
+            transforms.Resize((isize,isize)),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ]))
-    dataloader = DataLoader(cats_dataset, batch_size=batch, shuffle=True, num_workers=4)
+    dataloader = DataLoader(cats_dataset, batch_size=batch, shuffle=True, num_workers=2)
     return dataloader

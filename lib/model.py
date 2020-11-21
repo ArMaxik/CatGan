@@ -4,8 +4,10 @@ import torch.nn.functional as F
 
 import torchvision.utils as vutils
 
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+matplotlib.use('Agg')
 
 from lib.data import makeCatsDataset
 from lib.networks import Generator, Discriminator, weights_init
@@ -37,7 +39,7 @@ class DCGAN:
         self.d_it = opt.d_it
         self.noise = opt.noise
 
-        self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch)
+        self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch, isize=self.isize)
         self.gen = Generator(self.latent).to(self.device)
         self.dis = Discriminator().to(self.device)
         self.gen.apply(weights_init)
