@@ -10,7 +10,7 @@ import matplotlib.animation as animation
 matplotlib.use('Agg')
 
 from lib.data import makeCatsDataset
-from lib.networks import Generator, Discriminator, weights_init
+from lib.networks import Generator, Discriminator, Discriminator_WGAN, weights_init
 
 from lib.misc import noisy, image_with_title
 
@@ -37,6 +37,8 @@ class DCGAN:
         self.lr_decay_factor = opt.lr_decay_factor
         self.g_it = opt.g_it
         self.d_it = opt.d_it
+        self.b1 = opt.b1
+        self.b2 = opt.b2
         self.noise = opt.noise
 
         self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch, isize=self.isize)
@@ -124,8 +126,8 @@ class DCGAN:
         self.real_label = 0.9
         self.fake_label = 0.0
 
-        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(0.5, 0.999))
-        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(0.5, 0.999)) 
+        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
+        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
         self.criterion = nn.BCELoss()
         # self.criterion = nn.MSELoss()
 
@@ -145,8 +147,8 @@ class DCGAN:
         for epoch in range(self.epochs):
             if lr_dec_i < len(self.lr_decay_epoch):
                 if epoch == self.lr_decay_epoch[lr_dec_i]:
-                    self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g/(self.lr_decay_factor**lr_dec_i), betas=(0.5, 0.999))
-                    self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d/(self.lr_decay_factor**lr_dec_i), betas=(0.5, 0.999))
+                    self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g/(self.lr_decay_factor**lr_dec_i), betas=(self.b1, self.b2))
+                    self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d/(self.lr_decay_factor**lr_dec_i), betas=(self.b1, self.b2))
                     lr_dec_i += 1
             
             self.train_one_epoch()
@@ -207,10 +209,12 @@ class WGAN_GP(DCGAN):
     def __init__(self, opt):
         super().__init__(opt)
 
+        self.dis = Discriminator_WGAN().to(self.device)
         self.lambda_coff = opt.lambda_coff
 
     def gradien_penalty(self, imgs_real, imgs_fake):
-        epsilon = torch.rand(self.batch, device=self.device)
+        b, c, h, w = imgs_real.shape
+        epsilon = torch.rand((b, 1, 1, 1), device=self.device).repeat(1, c, h, w)
         interpolate = epsilon*imgs_real + (1.0 - epsilon)*imgs_fake
         interpolate.requires_grad_(True)
         
@@ -224,7 +228,7 @@ class WGAN_GP(DCGAN):
             retain_graph=True,
             only_inputs=True,
         )[0]
-        gradients = gradients.view(self.batch, -1)
+        gradients = gradients.view(b, -1)
 
         penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
         return self.lambda_coff*penalty
@@ -274,7 +278,7 @@ class WGAN_GP(DCGAN):
         self.G_losses = []
         self.D_losses = []
 
-        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(0.5, 0.999))
-        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(0.5, 0.999)) 
+        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
+        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
         self.criterion = nn.BCELoss()
         # self.criterion = nn.MSELoss()
