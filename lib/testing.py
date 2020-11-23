@@ -7,6 +7,9 @@ import data
 from networks import *
 from misc import *
 
+# DATA_PATH = "/home/v-eliseev/Datasets/cats/"
+DATA_PATH = "/mnt/p/datasets/cats/"
+
 def imshow(img, name=None):
     fig, ax = plt.subplots()
     img = np.transpose(img.numpy(), (1, 2, 0))
@@ -33,7 +36,7 @@ def image_with_title(img, title_text, info_text):
     img_n = plt.imshow(np.transpose(img,(1,2,0)), animated=True);
     return [img_n, title]
 
-dataloader = data.makeCatsDataset(path="/home/v-eliseev/Datasets/cats/", batch=16)
+dataloader = data.makeCatsDataset(path=DATA_PATH, batch=16)
 
 img_list = []
 for i_batch, im in enumerate(dataloader):
@@ -62,15 +65,44 @@ writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
 
 LATENT = 100
 
-gen = Generator(LATENT).cuda()
+gen = Progressive_Generator(LATENT, device="cuda:0")
+gen.add_block()
+gen.end_transition()
+gen.add_block()
+gen.end_transition()
+gen.add_block()
+gen.end_transition()
+gen.add_block()
+gen.end_transition()
+gen.add_block()
+gen.end_transition()
+gen.add_block()
 gen.apply(weights_init)
 
-dis = Discriminator().cuda()
+dis = Progressive_Discriminator(device="cuda:0")
+dis.add_block()
+dis.end_transition()
+dis.add_block()
+dis.end_transition()
+dis.add_block()
+dis.end_transition()
+dis.add_block()
+dis.end_transition()
+dis.add_block()
+dis.end_transition()
+dis.add_block()
 dis.apply(weights_init)
 
-data = gen(torch.randn(16, LATENT).cuda()).cpu()
-fig, ax = plt.subplots()
-fig.dpi = 250
-# imshow(torchvision.utils.make_grid((data.detach()+1)/2, nrow=4), name='test')
+print("== Transition testing")
+noise = torch.randn(16, LATENT).cuda()
+data = gen.transition_forward(noise, 0.2)
+dis.transition_forward(data.cuda(), 0.2)
+
+print("== Normal testing")
+gen.end_transition()
+dis.end_transition()
+data = gen(noise).cpu()
+
+torchvision.utils.save_image(data, "test.png", nrow=4, normalize=True)
+
 print(dis(data.cuda()).detach())
-plt.close()
