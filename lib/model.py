@@ -264,7 +264,7 @@ class WGAN_GP(DCGAN):
         if self.noise:
             imgs = noisy(imgs, self.device)
 
-        output_fake = self.dis(imgs).mean()
+        output_fake = self.dis(imgs).view(-1).mean()
         
         self.g_loss = -output_fake
         self.g_loss.backward()
