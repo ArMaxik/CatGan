@@ -161,20 +161,33 @@ class Progressive_Generator(nn.Module):
         
         self.nc = 512
         self.layers = [
-            nn.ConvTranspose2d(self.z, self.nc, 4, 1, 0, bias=True).to(self.device), # False?
+            nn.ConvTranspose2d(self.z, self.nc, 4, stride=1, padding=0, bias=False).to(self.device),
+            nn.BatchNorm2d(self.nc).to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
+            nn.ConvTranspose2d(self.nc, self.nc, 3, stride=1, padding=1, bias=False).to(self.device),
             nn.BatchNorm2d(self.nc).to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
         ]
-        self.toRGB = nn.Conv2d(self.nc, 3, (1, 1)).to(self.device)
+        self.toRGB = nn.ConvTranspose2d(self.nc, 3, (1, 1), bias=False).to(self.device)
+
+        for layer in self.layers + [self.toRGB]:
+            weights_init(layer)
 
     def add_block(self):
         self.layers.extend([
-            nn.ConvTranspose2d(self.nc,    self.nc // 2, (4, 4), 2, 1, bias=True).to(self.device),
+            nn.ConvTranspose2d(self.nc,    self.nc // 2, (4, 4), stride=2, padding=1, bias=False).to(self.device),
+            nn.BatchNorm2d(self.nc // 2).to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
+            nn.ConvTranspose2d(self.nc // 2,    self.nc // 2, (3, 3), stride=1, padding=1, bias=False).to(self.device),
             nn.BatchNorm2d(self.nc // 2).to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
         ])
         self.nc //= 2
         self.toRGB_new = nn.Conv2d(self.nc, 3, (1, 1)).to(self.device)
+
+        for layer in self.layers[:-6] + [self.toRGB_new]:
+            weights_init(layer)
+            
 
     def forward(self, x):
         x = x.view(-1, self.z, 1, 1)
@@ -187,17 +200,16 @@ class Progressive_Generator(nn.Module):
 
     def transition_forward(self, x, alpha):
         x = x.view(-1, self.z, 1, 1)
-        for layer in self.layers[:-3]:
+        for layer in self.layers[:-6]:
             x = layer(x)
 
         x_old = nn.functional.interpolate(x, size = x.shape[2] * 2)
         x_old = self.toRGB(x_old)
         x_old = torch.tanh(x_old)
 
-        x_new = self.layers[-3](x)
-        x_new = self.layers[-2](x_new)
-        x_new = self.layers[-1](x_new)
-        x_new = self.toRGB_new(x_new)
+        x_new = self.layers[-6](x)
+        for layer in self.layers[-5:] + [self.toRGB_new]:
+            x_new = layer(x_new)
         x_new = torch.tanh(x_new)
 
         x = x_new * alpha + x_old * (1.0 - alpha)
@@ -214,18 +226,30 @@ class Progressive_Discriminator(nn.Module):
         
         self.nc = 512
         self.layers = [
-            nn.Conv2d(self.nc, 1, (4, 4), 1, 0, bias=True).to(self.device), # False?
+            nn.Conv2d(self.nc, self.nc, 3, stride=1, padding=1, bias=False).to(self.device),
+            nn.InstanceNorm2d(self.nc).to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
+            nn.Conv2d(self.nc, 1, (4, 4), 1, 0, bias=False).to(self.device), # False?
         ]
         self.fromRGB = nn.Conv2d(3, self.nc, (1, 1)).to(self.device)
 
+        for layer in self.layers + [self.fromRGB]:
+            weights_init(layer)
+
     def add_block(self):
         self.layers = [
-            nn.Conv2d(self.nc //2, self.nc, 4, 2, padding=1).to(self.device),
+            nn.Conv2d(self.nc //2, self.nc, 4, stride=2, padding=1, bias=False).to(self.device),
+            nn.InstanceNorm2d(self.nc).to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
+            nn.Conv2d(self.nc, self.nc, 3, stride=1, padding=1, bias=False).to(self.device),
             nn.InstanceNorm2d(self.nc).to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
         ] + self.layers
         self.nc //= 2
-        self.fromRGB_new = nn.Conv2d(3, self.nc, (1, 1)).to(self.device)
+        self.fromRGB_new = nn.Conv2d(3, self.nc, (1, 1), bias=False).to(self.device)
+
+        for layer in self.layers[:6] + [self.fromRGB_new]:
+            weights_init(layer)
 
     def forward(self, x):
         x = self.fromRGB(x)
@@ -240,12 +264,11 @@ class Progressive_Discriminator(nn.Module):
         x_old = self.fromRGB(x_old)
 
         x_new = self.fromRGB_new(x)
-        x_new = self.layers[0](x_new)
-        x_new = self.layers[1](x_new)
-        x_new = self.layers[2](x_new)
+        for layer in self.layers[:6]: 
+            x_new = layer(x_new)
         
         x = x_new * alpha + x_old * (1.0 - alpha)
-        for layer in self.layers[3:]:
+        for layer in self.layers[6:]:
             x = layer(x)
 
         return x

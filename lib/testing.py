@@ -36,16 +36,16 @@ def image_with_title(img, title_text, info_text):
     img_n = plt.imshow(np.transpose(img,(1,2,0)), animated=True);
     return [img_n, title]
 
-dataloader = data.makeCatsDataset(path=DATA_PATH, batch=16)
+dataloader = data.makeCatsDataset(path=DATA_PATH, batch=16, isize=16)
 
 img_list = []
 for i_batch, im in enumerate(dataloader):
     im = noisy(im)
     im = (im+1.0)/2.0
     
-    imshow(torchvision.utils.make_grid(im, nrow=4), name=str(i_batch))
+    # imshow(torchvision.utils.make_grid(im, nrow=4), name=str(i_batch))
     img_list.append(torchvision.utils.make_grid(im, nrow=4))
-    if i_batch == 0:
+    if i_batch == 100:
         break
 
 fig = plt.figure(figsize=(12,12))
@@ -56,24 +56,16 @@ ims = [
                      "[RGAN] Batch size: {0}, Latent space: {1}, size {2}x{2}".format(16, 15, 32))
     for i, img in enumerate(img_list)
     ]
-ani = animation.ArtistAnimation(fig, ims, interval=750, repeat_delay=1000, blit=True)
+ani = animation.ArtistAnimation(fig, ims, interval=1500, repeat_delay=1000, blit=True)
 
 Writer = animation.writers['ffmpeg']
-writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=5000)
 # ani.save('test.mp4', writer=writer)
 
 
 LATENT = 100
-
+print("== GAN testing")
 gen = Progressive_Generator(LATENT, device="cuda:0")
-gen.add_block()
-gen.end_transition()
-gen.add_block()
-gen.end_transition()
-gen.add_block()
-gen.end_transition()
-gen.add_block()
-gen.end_transition()
 gen.add_block()
 gen.end_transition()
 gen.add_block()
@@ -83,15 +75,17 @@ dis = Progressive_Discriminator(device="cuda:0")
 dis.add_block()
 dis.end_transition()
 dis.add_block()
-dis.end_transition()
-dis.add_block()
-dis.end_transition()
-dis.add_block()
-dis.end_transition()
-dis.add_block()
-dis.end_transition()
-dis.add_block()
 dis.apply(weights_init)
+
+print(*gen.layers, sep='\n')
+print(gen.toRGB)
+print(gen.toRGB_new)
+
+print()
+print(dis.fromRGB)
+print(dis.fromRGB_new)
+print(*dis.layers, sep='\n')
+
 
 print("== Transition testing")
 noise = torch.randn(16, LATENT).cuda()

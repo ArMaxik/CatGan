@@ -101,19 +101,21 @@ class DCGAN:
             if self.noise:
                 self.data_device = noisy(self.data_device, self.device)
 
-            mini_it = i % (self.g_it + self.d_it)
+            mini_it = i % (self.g_it + self.d_it-1)
             if mini_it < self.d_it:
                 self.train_discriminator()
-            if mini_it >= self.d_it:
+            if mini_it >= self.d_it-1:
                 self.train_generator()
 
             self.pbar.update()
+        self.make_stats()
+        self.make_chart()
             
 
     def make_stats(self):
-        with torch.no_grad():
-            fake = self.gen(self.fixed_noise).detach().cpu()
-        self.img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=6))
+        # with torch.no_grad():
+        #     fake = self.gen(self.fixed_noise).detach().cpu()
+        # self.img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=6))
 
         self.G_losses.append(self.g_loss.item())
         self.D_losses.append(self.d_loss.item())
@@ -175,10 +177,10 @@ class DCGAN:
         plt.savefig(self.save_folder + "losses.png")
         plt.close()
 
-        noise = torch.randn(64, self.latent, device=self.device)
-        with torch.no_grad():
-            fake = self.gen(noise).detach().cpu()
-        vutils.save_image(fake, self.save_folder + "final.png", normalize=True)
+        # noise = torch.randn(64, self.latent, device=self.device)
+        # with torch.no_grad():
+        #     fake = self.gen(noise).detach().cpu()
+        # vutils.save_image(fake, self.save_folder + "final.png", normalize=True)
 
     def save_video(self):
         fig = plt.figure(figsize=(12,12))
@@ -314,6 +316,7 @@ class Progressive_GAN(WGAN_GP):
 
     def setup_train(self):
         self.fixed_noise = torch.randn(36, self.latent, device=self.device)
+        self.fixed_noise_64 = torch.randn(64, self.latent, device=self.device)
         self.img_list = []
         self.G_losses = []
         self.D_losses = []
@@ -334,13 +337,13 @@ class Progressive_GAN(WGAN_GP):
         self.setup_train()
 
         self.pbar = tqdm()
-        self.pbar.reset(total=self.epochs*len(self.dataloader)*(self.isize//4+1))  # initialise with new `total`
 
         alpha_inc = 1.0 / (self.epochs-1)
 
         while self.cur_isize < self.isize:
             print("train {}x{}".format(self.cur_isize, self.cur_isize))
             self.transition = False
+            self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
             for epoch in range(self.epochs):
                 self.train_one_epoch()
                 self.save_progress_image()
@@ -353,6 +356,7 @@ class Progressive_GAN(WGAN_GP):
             self.alpha = alpha_inc
 
             print("train transition{}x{}".format(self.cur_isize, self.cur_isize))
+            self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
             for epoch in range(self.epochs):
                 self.train_one_epoch()
                 self.save_progress_image()
@@ -363,7 +367,8 @@ class Progressive_GAN(WGAN_GP):
 
             # self.make_chart()
             # self.save_weights()
-
+        print("train {}x{}".format(self.cur_isize, self.cur_isize))
+        self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
         self.transition = False
         for epoch in range(self.epochs):
             self.train_one_epoch()
@@ -451,27 +456,12 @@ class Progressive_GAN(WGAN_GP):
         self.op_gen.step()
         self.D_G_z2 = output_fake.mean().item()
 
-    def train_one_epoch(self):
-        for i, data in enumerate(self.dataloader, 0):
-            self.data_device = data.to(self.device)
-            if self.noise:
-                self.data_device = noisy(self.data_device, self.device)
-
-            mini_it = i % (self.g_it + self.d_it)
-            if mini_it < self.d_it:
-                self.train_discriminator()
-            if mini_it >= self.d_it:
-                self.train_generator()
-
-            self.pbar.update()
-
     def save_progress_image(self):
-        noise = torch.randn(64, self.latent, device=self.device)
         with torch.no_grad():
             if self.transition:
-                fake = self.gen.transition_forward(noise, self.alpha).detach().cpu()
+                fake = self.gen.transition_forward(self.fixed_noise_64, self.alpha).detach().cpu()
             else:
-                fake = self.gen(noise).detach().cpu()
+                fake = self.gen(self.fixed_noise_64).detach().cpu()
         name = "final_{}x{}".format(self.cur_isize, self.cur_isize)
         if self.transition:
             name += "_transition"
