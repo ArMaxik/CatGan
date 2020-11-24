@@ -8,41 +8,42 @@ class Generator(nn.Module):
 
         self.z = LATENT
 
-        self.c1 = nn.ConvTranspose2d(self.z, 512, (4, 4), 1, 0, bias=True) # -> 4x4
+        self.c1 = nn.ConvTranspose2d(self.z, 512, (4, 4), 1, 0, bias=False) # -> 4x4
         self.b1 = nn.BatchNorm2d(512)
 
-        self.c2 = nn.ConvTranspose2d(512,    256, (4, 4), 2, 1, bias=True) # -> 8x8
-        self.b2 = nn.BatchNorm2d(256)
+        self.c2 = nn.ConvTranspose2d(512,    512, (3, 3), 2, 1, bias=False) # -> 4x4
+        self.b2 = nn.BatchNorm2d(512)
 
-        self.c3 = nn.ConvTranspose2d(256,    128, (4, 4), 2, 1, bias=True) # -> 16x16
-        self.b3 = nn.BatchNorm2d(128)
+        self.c3 = nn.ConvTranspose2d(512,    256, (4, 4), 2, 1, bias=False) # -> 8x8
+        self.b3 = nn.BatchNorm2d(256)
         
-        self.c4 = nn.ConvTranspose2d(128,     64, (4, 4), 2, 1, bias=True) # -> 32x32
-        self.b4 = nn.BatchNorm2d(64)
+        self.c4 = nn.ConvTranspose2d(256,     256, (3, 3), 2, 1, bias=False) # -> 8x8
+        self.b4 = nn.BatchNorm2d(256)
         
-        self.c5 = nn.ConvTranspose2d(64,      3, (4, 4), 2, 1, bias=True) # -> 64x64
+        self.c5 = nn.Conv2d(256,      3, (1,1), stride=1, padding=0, bias=False) # -> 8x8
 
 
         self.drop = nn.Dropout(p=0.01)
+        self.leaky_relu = nn.LeakyReLU(0.2)
 
     def forward(self, x):
         x = x.view(-1, self.z, 1, 1)
     
         x = self.c1(x)
         x = self.b1(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
 
         x = self.c2(x)
         x = self.b2(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
 
         x = self.c3(x)
         x = self.b3(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
         
         x = self.c4(x)
         x = self.b4(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
                 
         x = self.c5(x)
 
@@ -73,6 +74,7 @@ class Discriminator(nn.Module):
 
         self.l1 = nn.Linear(in_features=512*4*4, out_features=1)
 #         self.l2 = nn.Linear(in_features=8*4*4, out_features=1)
+        self.leaky_relu = nn.LeakyReLU(0.2)
 
         
         self.drop = nn.Dropout(p=0.3)
@@ -80,27 +82,27 @@ class Discriminator(nn.Module):
     def forward(self, x):
         x = self.c1(x)
         x = self.b1(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
 
         x = self.c2(x)
         x = self.b2(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
 
         x = self.c3(x)
         x = self.b3(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
         
         x = self.c4(x)
         x = self.b4(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
         
         x = self.c5(x)
         x = self.b5(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
         
         
         x = x.view(-1, 512*4*4)
-        x = self.l1(x)
+        x = self.l1(x),
         x = torch.sigmoid(x)
 
         return x
@@ -109,7 +111,7 @@ class Discriminator_WGAN(nn.Module):
     def __init__(self):
         super(Discriminator_WGAN, self).__init__()
 
-        self.c1 = nn.Conv2d(3, 64, 4, 2, padding=1)  # ->32x32
+        self.c1 = nn.Conv2d(3, 256, kernel_size=1, stride=1, padding=0)  # ->8x8
         self.b1 = nn.InstanceNorm2d(64, affine=True)
         
         self.c2 = nn.Conv2d(64, 128, 3, 1, padding=1)  # ->32x32
@@ -126,26 +128,26 @@ class Discriminator_WGAN(nn.Module):
 
         self.l1 = nn.Linear(in_features=512*4*4, out_features=1)
 #         self.l2 = nn.Linear(in_features=8*4*4, out_features=1)
-
+        self.leaky_relu = nn.LeakyReLU(0.2)
         
         self.drop = nn.Dropout(p=0.3)
         
     def forward(self, x):
         x = self.c1(x)
         x = self.b1(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
 
         x = self.c2(x)
         x = self.b2(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
 
         x = self.c3(x)
         x = self.b3(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
         
         x = self.c4(x)
         x = self.b4(x)
-        x = F.leaky_relu(x)
+        x = self.leaky_relu(x)
         
         x = self.c5(x)
 
@@ -168,7 +170,7 @@ class Progressive_Generator(nn.Module):
             nn.BatchNorm2d(self.nc).to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
         ]
-        self.toRGB = nn.ConvTranspose2d(self.nc, 3, (1, 1), bias=False).to(self.device)
+        self.toRGB = nn.Conv2d(self.nc, 3, (1, 1), bias=False).to(self.device)
 
         for layer in self.layers + [self.toRGB]:
             weights_init(layer)
@@ -207,8 +209,8 @@ class Progressive_Generator(nn.Module):
         x_old = self.toRGB(x_old)
         x_old = torch.tanh(x_old)
 
-        x_new = self.layers[-6](x)
-        for layer in self.layers[-5:] + [self.toRGB_new]:
+        x_new = x
+        for layer in self.layers[-6:] + [self.toRGB_new]:
             x_new = layer(x_new)
         x_new = torch.tanh(x_new)
 
@@ -260,7 +262,7 @@ class Progressive_Discriminator(nn.Module):
         return x
 
     def transition_forward(self, x, alpha):
-        x_old = nn.functional.interpolate(x, size = x.shape[2] // 2)
+        x_old = nn.functional.avg_pool2d(x, 2)
         x_old = self.fromRGB(x_old)
 
         x_new = self.fromRGB_new(x)

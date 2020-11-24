@@ -67,13 +67,9 @@ LATENT = 100
 print("== GAN testing")
 gen = Progressive_Generator(LATENT, device="cuda:0")
 gen.add_block()
-gen.end_transition()
-gen.add_block()
 gen.apply(weights_init)
 
 dis = Progressive_Discriminator(device="cuda:0")
-dis.add_block()
-dis.end_transition()
 dis.add_block()
 dis.apply(weights_init)
 

@@ -14,7 +14,7 @@ import os
 
 class CatsDataset(Dataset):
     def __init__(self, index_file, img_dir, transform=None):
-        self.names = pd.read_csv(index_file)
+        self.names = pd.read_csv(index_file).head(500)
         self.img_dir = img_dir
         self.transform = transform
 
