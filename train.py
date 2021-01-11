@@ -1,9 +1,9 @@
-from lib.model import DCGAN, WGAN_GP, Progressive_GAN
+from lib.model.Progressive_DCGAN import Progressive_DCGAN
+from lib.model.Progressive_WGAN import Progressive_WGAN
 import torch
-
 class options:
     def __init__(self):
-        self.exp_name = "Progressive_GAN_01"
+        self.exp_name = "Progressive_WGAN_01"
         self.batch = 16
         self.latent = 512
         self.isize = 32
@@ -11,7 +11,7 @@ class options:
         self.data_path = "/home/v-eliseev/Datasets/cats/"
         # self.data_path = "/mnt/p/datasets/cats/"
 
-        self.epochs = 30
+        self.epochs = 250
         self.lr_d = 0.0001
         self.lr_g = 0.0001
         self.lr_decay_epoch = []
@@ -26,7 +26,7 @@ class options:
 
 opt = options()
 
-gan = Progressive_GAN(opt)
+gan = Progressive_WGAN(opt)
 gan.train()
 
 with open("./out/{}/opt.txt".format(opt.exp_name), 'w') as f:

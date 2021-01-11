@@ -4,11 +4,12 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 import data
+from torchsummary import summary
 from networks import *
 from misc import *
 
-# DATA_PATH = "/home/v-eliseev/Datasets/cats/"
-DATA_PATH = "/mnt/p/datasets/cats/"
+DATA_PATH = "/home/v-eliseev/Datasets/cats/"
+# DATA_PATH = "/mnt/p/datasets/cats/"
 
 def imshow(img, name=None):
     fig, ax = plt.subplots()
@@ -69,13 +70,11 @@ gen = Progressive_Generator(LATENT, device="cuda:0")
 gen.add_block()
 gen.end_transition()
 gen.add_block()
-gen.apply(weights_init)
 
 dis = Progressive_Discriminator(device="cuda:0")
 dis.add_block()
 dis.end_transition()
 dis.add_block()
-dis.apply(weights_init)
 
 print(*gen.layers, sep='\n')
 print(gen.toRGB)
@@ -99,4 +98,6 @@ data = gen(noise).cpu()
 
 torchvision.utils.save_image(data, "test.png", nrow=4, normalize=True)
 
-print(dis(data.cuda()).detach())
+# print(dis(data.cuda()).detach())
+
+# summary(gen, (3, LATENT))

@@ -1,0 +1,207 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+import torchvision.utils as vutils
+
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+matplotlib.use('Agg')
+
+from lib.data import makeCatsDataset
+from lib.networks import Generator, Discriminator, Discriminator_WGAN, Progressive_Discriminator, Progressive_Generator, weights_init
+
+from lib.misc import noisy, image_with_title
+
+import math
+import numpy as np
+from tqdm import tqdm
+import os
+
+
+
+class DCGAN:
+    def __init__(self, opt):
+        self.exp_name = opt.exp_name
+        self.batch = opt.batch
+        self.latent = opt.latent
+        self.isize = opt.isize
+        self.device = opt.device
+        self.data_path = opt.data_path
+
+        self.epochs = opt.epochs
+        self.lr_d = opt.lr_d
+        self.lr_g = opt.lr_g
+        self.lr_decay_epoch = opt.lr_decay_epoch
+        self.lr_decay_factor = opt.lr_decay_factor
+        self.g_it = opt.g_it
+        self.d_it = opt.d_it
+        self.b1 = opt.b1
+        self.b2 = opt.b2
+        self.noise = opt.noise
+
+        self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch, isize=self.isize)
+        self.gen = Generator(self.latent).to(self.device)
+        self.dis = Discriminator().to(self.device)
+        self.gen.apply(weights_init)
+        self.dis.apply(weights_init)
+
+    def train_discriminator(self):
+        self.op_dis.zero_grad()
+        # True
+        imgs = self.data_device
+
+        output_real = self.dis(imgs).view(-1)
+
+        label_real = torch.full((output_real.size()[0],), self.real_label, device=self.device) 
+        self.D_x = output_real.mean().item()
+
+        # False
+        z = torch.randn(imgs.size()[0], self.latent, device=self.device)
+        imgs = self.gen(z)
+        if self.noise:
+            imgs = noisy(imgs, self.device)
+
+        output_fake = self.dis(imgs).view(-1)
+        label_fake = torch.full((output_fake.size()[0],), self.fake_label, device=self.device)
+
+        real_loss = self.criterion(output_real, label_real)
+        fake_loss = self.criterion(output_fake, label_fake)
+
+        self.d_loss = (real_loss + fake_loss) / 2
+        self.d_loss.backward()
+
+        self.D_G_z1 = output_fake.mean().item()
+
+        self.op_dis.step()
+
+    def train_generator(self):
+        self.op_gen.zero_grad()
+
+        z = torch.randn(self.data_device.size()[0], self.latent, device=self.device)
+
+        imgs = self.gen(z)
+        if self.noise:
+            imgs = noisy(imgs, self.device)
+
+        output_fake = self.dis(imgs).view(-1)
+
+        label_g = torch.full((output_fake.size()[0],), self.real_label, device=self.device) 
+        
+        self.g_loss = self.criterion(output_fake, label_g)
+        self.g_loss.backward()
+
+        self.op_gen.step()
+        self.D_G_z2 = output_fake.mean().item()
+    
+    def train_one_epoch(self):
+        for i, data in enumerate(self.dataloader, 0):
+            self.data_device = data.to(self.device)
+            if self.noise:
+                self.data_device = noisy(self.data_device, self.device)
+
+            mini_it = i % (self.g_it + self.d_it-1)
+            if mini_it < self.d_it:
+                self.train_discriminator()
+            if mini_it >= self.d_it-1:
+                self.train_generator()
+
+            self.pbar.update()
+        self.make_stats()
+        self.make_chart()
+            
+
+    def make_stats(self):
+        # with torch.no_grad():
+        #     fake = self.gen(self.fixed_noise).detach().cpu()
+        # self.img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=6))
+
+        self.G_losses.append(self.g_loss.item())
+        self.D_losses.append(self.d_loss.item())
+
+    def setup_train(self):
+        self.fixed_noise = torch.randn(36, self.latent, device=self.device)
+        self.img_list = []
+        self.G_losses = []
+        self.D_losses = []
+        self.real_label = 0.9
+        self.fake_label = 0.0
+
+        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
+        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
+        self.criterion = nn.BCELoss()
+        # self.criterion = nn.MSELoss()
+
+    def train(self):
+        self.save_folder = os.path.join('./out', self.exp_name + '/')
+        self.init_folder()
+
+        print("Strated {}\nepochs: {}\ndevice: {}".format(self.exp_name, self.epochs, self.device))
+        
+        self.setup_train()
+
+        lr_dec_i = 0
+
+        self.pbar = tqdm()
+        self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
+
+        for epoch in range(self.epochs):
+            if lr_dec_i < len(self.lr_decay_epoch):
+                if epoch == self.lr_decay_epoch[lr_dec_i]:
+                    self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g/(self.lr_decay_factor**lr_dec_i), betas=(self.b1, self.b2))
+                    self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d/(self.lr_decay_factor**lr_dec_i), betas=(self.b1, self.b2))
+                    lr_dec_i += 1
+            
+            self.train_one_epoch()
+            self.make_stats()
+
+            print('[{:3d}/{:d}] Loss_D: {:.4f}  Loss_G: {:.4f} | D(x): {:.4f}  D(G(z)): {:.4f} / {:.4f}'.format(
+                epoch, self.epochs-1,
+                self.d_loss.item(), self.g_loss.item(),
+                self.D_x, self.D_G_z1, self.D_G_z2
+                ))
+            self.make_chart()
+            self.save_weights()
+
+        self.save_video()
+
+    def make_chart(self):
+        plt.figure(figsize=(10,5))
+        plt.title("Generator and Discriminator Loss During Training")
+        plt.plot(self.G_losses,label="G")
+        plt.plot(self.D_losses,label="D")
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.legend()
+        plt.savefig(self.save_folder + "losses.png")
+        plt.close()
+
+        # noise = torch.randn(64, self.latent, device=self.device)
+        # with torch.no_grad():
+        #     fake = self.gen(noise).detach().cpu()
+        # vutils.save_image(fake, self.save_folder + "final.png", normalize=True)
+
+    def save_video(self):
+        fig = plt.figure(figsize=(12,12))
+        ims = [
+            image_with_title(img,
+                            "Epoch: {}".format(i),
+                            "[RGAN] batch size: {0}, latent space: {1}, size {2}x{2}".format(self.batch, self.latent, 32))
+            for i, img in enumerate(self.img_list)
+            ]
+        ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
+        
+        Writer = animation.writers['ffmpeg']
+        writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=3500)
+        ani.save(self.save_folder + 'hist.mp4', writer=writer)
+
+    def save_weights(self):
+        g_w = self.gen.state_dict()
+        d_w = self.dis.state_dict()
+        torch.save(g_w, self.save_folder + 'c_gen.pth')
+        torch.save(d_w, self.save_folder + 'c_dis.pth')
+
+    def init_folder(self):
+        if not os.path.isdir(self.save_folder):
+            os.makedirs(self.save_folder)
