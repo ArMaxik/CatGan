@@ -344,7 +344,7 @@ class Progressive_GAN(WGAN_GP):
 
         self.pbar = tqdm()
 
-        alpha_inc = 1.0 / (self.epochs-1)
+        alpha_inc = 1.0 / (self.epochs+1)
 
         while self.cur_isize < self.isize:
             print(f"train {self.cur_isize}x{self.cur_isize}")
