@@ -154,10 +154,11 @@ class Discriminator_WGAN(nn.Module):
         return x
 
 class Progressive_Generator(nn.Module):
-    def __init__(self, LATENT, device="cpu"):
+    def __init__(self, LATENT, device="cpu", device_ids=[]):
         super(Progressive_Generator, self).__init__()
         self.to(device)
         self.device = device
+        self.device_ids = device_ids
         
         self.z = LATENT
         
@@ -171,14 +172,19 @@ class Progressive_Generator(nn.Module):
             nn.LeakyReLU(0.2).to(self.device),
         ]
         self.toRGB = nn.Conv2d(self.nc, 3, (1, 1), bias=False).to(self.device)
-        self.init_size = 6
+
         self.block_size = 7
 
         for layer in self.layers + [self.toRGB]:
             weights_init(layer)
+        
+        if len(self.device_ids) > 1 and not (self.device == "cpu"):
+            self.layers = [nn.DataParallel(l, device_ids=self.device_ids) for l in self.layers]
+            self.toRGB = nn.DataParallel(self.toRGB, device_ids=self.device_ids)
 
+        
     def add_block(self):
-        self.layers.extend([
+        block = [
             nn.Upsample(scale_factor=2.0).to(self.device),
             nn.ConvTranspose2d(self.nc, self.nc // 2, (3, 3), stride=1, padding=1, bias=False).to(self.device),
             nn.BatchNorm2d(self.nc // 2).to(self.device),
@@ -186,12 +192,20 @@ class Progressive_Generator(nn.Module):
             nn.ConvTranspose2d(self.nc // 2, self.nc // 2, (3, 3), stride=1, padding=1, bias=False).to(self.device),
             nn.BatchNorm2d(self.nc // 2).to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
-        ])
-        self.nc //= 2
-        self.toRGB_new = nn.Conv2d(self.nc, 3, (1, 1), bias=False).to(self.device)
+        ]
+        self.block_size = len(block)
 
-        for layer in self.layers[-self.block_size:] + [self.toRGB_new]:
+        self.toRGB_new = nn.Conv2d(self.nc // 2, 3, (1, 1), bias=False).to(self.device)
+
+        for layer in block + [self.toRGB_new]:
             weights_init(layer)
+
+        if len(self.device_ids) > 1 and not (self.device == "cpu"):
+            block = [nn.DataParallel(l, device_ids=self.device_ids) for l in block]
+            self.toRGB_new = nn.DataParallel(self.toRGB_new, device_ids=self.device_ids)
+
+        self.layers.extend(block)
+        self.nc //= 2
             
 
     def forward(self, x):
@@ -224,10 +238,11 @@ class Progressive_Generator(nn.Module):
         self.toRGB = self.toRGB_new
 
 class Progressive_Discriminator(nn.Module):
-    def __init__(self, device="cpu"):
+    def __init__(self, device="cpu", device_ids=[]):
         super(Progressive_Discriminator, self).__init__()
 
         self.device = device
+        self.device_ids = device_ids
         
         self.nc = 128
         self.layers = [
@@ -249,8 +264,15 @@ class Progressive_Discriminator(nn.Module):
         for layer in self.layers + [self.fromRGB, self.linear]:
             weights_init(layer)
 
+        if len(self.device_ids) > 1 and not (self.device == "cpu"):
+            self.layers = [nn.DataParallel(l, device_ids=self.device_ids) for l in self.layers]
+            self.fromRGB = nn.DataParallel(self.fromRGB, device_ids=self.device_ids)
+            self.lrelu_fromRGB = nn.DataParallel(self.lrelu_fromRGB, device_ids=self.device_ids)
+            self.inorm_fromRGB = nn.DataParallel(self.inorm_fromRGB, device_ids=self.device_ids)
+
+
     def add_block(self):
-        self.layers = [
+        block = [
             nn.Conv2d(self.nc//2, self.nc, kernel_size=3, stride=1, padding=1, bias=False).to(self.device),
             nn.InstanceNorm2d(self.nc).to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
@@ -258,13 +280,22 @@ class Progressive_Discriminator(nn.Module):
             nn.InstanceNorm2d(self.nc).to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
             nn.AvgPool2d(2).to(self.device),
-        ] + self.layers
-        self.nc //= 2
-        self.fromRGB_new = nn.Conv2d(3, self.nc, (1, 1), bias=False).to(self.device)
-        self.inorm_fromRGB_new = nn.InstanceNorm2d(self.nc).to(self.device)
-
-        for layer in self.layers[:self.block_size] + [self.fromRGB_new]:
+        ]
+        self.fromRGB_new = nn.Conv2d(3, self.nc // 2, (1, 1), bias=False).to(self.device)
+        self.inorm_fromRGB_new = nn.InstanceNorm2d(self.nc // 2).to(self.device)
+        
+        for layer in block + [self.fromRGB_new, self.inorm_fromRGB_new]:
             weights_init(layer)
+
+        if len(self.device_ids) > 1 and not (self.device == "cpu"):
+            block = [nn.DataParallel(l, device_ids=self.device_ids) for l in block]
+            self.fromRGB_new = nn.DataParallel(self.fromRGB_new, device_ids=self.device_ids)
+            self.inorm_fromRGB_new = nn.DataParallel(self.inorm_fromRGB_new, device_ids=self.device_ids)
+
+        
+        self.layers = block + self.layers
+        self.nc //= 2
+
 
     def forward(self, x):
         x = self.fromRGB(x)

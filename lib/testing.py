@@ -4,11 +4,12 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 import data
-from torchsummary import summary
+# from torchsummary import summary
 from networks import *
 from misc import *
 
-DATA_PATH = "/home/v-eliseev/Datasets/cats/"
+# DATA_PATH = "/home/v-eliseev/Datasets/cats/"
+DATA_PATH = "/raid/veliseev/datasets/cats/"
 # DATA_PATH = "/mnt/p/datasets/cats/"
 
 def imshow(img, name=None):
@@ -38,7 +39,7 @@ def image_with_title(img, title_text, info_text):
     return [img_n, title]
 
 dataloader = data.makeCatsDataset(path=DATA_PATH, batch=16, isize=16)
-
+print(f"DATA lenght {len(dataloader)}")
 img_list = []
 for i_batch, im in enumerate(dataloader):
     im = noisy(im)
@@ -66,12 +67,12 @@ writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=5000)
 
 LATENT = 100
 print("== GAN testing")
-gen = Progressive_Generator(LATENT, device="cuda:0")
+gen = Progressive_Generator(LATENT, device="cuda", device_ids=[0,1,2])
 gen.add_block()
 gen.end_transition()
 gen.add_block()
 
-dis = Progressive_Discriminator(device="cuda:0")
+dis = Progressive_Discriminator(device="cuda", device_ids=[0,1,2])
 dis.add_block()
 dis.end_transition()
 dis.add_block()

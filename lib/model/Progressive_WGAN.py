@@ -28,6 +28,7 @@ class Progressive_WGAN(WGAN_GP):
         self.isize = opt.isize
         self.cur_isize = 4
         self.device = opt.device
+        self.device_ids = opt.device_ids
         self.data_path = opt.data_path
 
         self.epochs = opt.epochs
@@ -44,11 +45,11 @@ class Progressive_WGAN(WGAN_GP):
         
 
         self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch, isize=self.cur_isize)
-        self.gen = Progressive_Generator(self.latent, device=self.device)
+        self.gen = Progressive_Generator(self.latent, device=self.device, device_ids=self.device_ids)
         # self.gen.add_block()
         # self.gen.end_transition()
         
-        self.dis = Progressive_Discriminator(device=self.device)
+        self.dis = Progressive_Discriminator(device=self.device, device_ids=self.device_ids)
         # self.dis.add_block()
         # self.dis.end_transition()
 

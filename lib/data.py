@@ -14,7 +14,7 @@ import os
 
 class CatsDataset(Dataset):
     def __init__(self, index_file, img_dir, transform=None):
-        self.names = pd.read_csv(index_file).head(500)
+        self.names = pd.read_csv(index_file)
         self.img_dir = img_dir
         self.transform = transform
 
@@ -52,5 +52,5 @@ def makeCatsDataset(batch=16, isize=64, path=DATA_DIR):
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ]))
-    dataloader = DataLoader(cats_dataset, batch_size=batch, shuffle=True, num_workers=2)
+    dataloader = DataLoader(cats_dataset, batch_size=batch, shuffle=True, num_workers=32)
     return dataloader
