@@ -15,7 +15,7 @@ def noisy(image, device='cpu:0'):
 
 def image_with_title(img, title_text, info_text):
     plt.axis('off')
-    title = plt.text(0,-7,
+    title = plt.text(0,-12,
                     title_text, 
                     fontsize=26)
     title.set_bbox(dict(facecolor='white', alpha=1.0, edgecolor='white'))

@@ -25,7 +25,13 @@ class WGAN_GP(DCGAN):
     def __init__(self, opt):
         super().__init__(opt)
 
+        self.device_ids = opt.device_ids
         self.dis = Discriminator_WGAN().to(self.device)
+
+        if len(self.device_ids) > 1 and not (self.device == "cpu"):
+            self.gen = nn.DataParallel(self.gen, device_ids=self.device_ids)
+            self.dis = nn.DataParallel(self.dis, device_ids=self.device_ids)
+
         self.lambda_coff = opt.lambda_coff
 
     def gradien_penalty(self, imgs_real, imgs_fake):
@@ -90,6 +96,8 @@ class WGAN_GP(DCGAN):
 
     def setup_train(self):
         self.fixed_noise = torch.randn(36, self.latent, device=self.device)
+        self.fixed_noise_64 = torch.randn(64, self.latent, device=self.device)
+
         self.img_list = []
         self.G_losses = []
         self.D_losses = []
@@ -98,3 +106,10 @@ class WGAN_GP(DCGAN):
         self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
         self.criterion = nn.BCELoss()
         # self.criterion = nn.MSELoss()
+
+    def save_progress_image(self):
+        with torch.no_grad():
+            fake = self.gen(self.fixed_noise_64).detach().cpu()
+        name = "final.png"
+
+        vutils.save_image(fake, self.save_folder + name, normalize=True)

@@ -108,14 +108,15 @@ class DCGAN:
                 self.train_generator()
 
             self.pbar.update()
-        self.make_stats()
+        # self.make_stats()
         self.make_chart()
+        self.save_progress_image()
             
 
     def make_stats(self):
-        # with torch.no_grad():
-        #     fake = self.gen(self.fixed_noise).detach().cpu()
-        # self.img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=6))
+        with torch.no_grad():
+            fake = self.gen(self.fixed_noise).detach().cpu()
+        self.img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=6))
 
         self.G_losses.append(self.g_loss.item())
         self.D_losses.append(self.d_loss.item())
@@ -147,12 +148,11 @@ class DCGAN:
         self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
 
         for epoch in range(self.epochs):
-            if lr_dec_i < len(self.lr_decay_epoch):
-                if epoch == self.lr_decay_epoch[lr_dec_i]:
-                    self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g/(self.lr_decay_factor**lr_dec_i), betas=(self.b1, self.b2))
-                    self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d/(self.lr_decay_factor**lr_dec_i), betas=(self.b1, self.b2))
-                    lr_dec_i += 1
-            
+            # if lr_dec_i < len(self.lr_decay_epoch):
+            #     if epoch == self.lr_decay_epoch[lr_dec_i]:
+            #         self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g/(self.lr_decay_factor**lr_dec_i), betas=(self.b1, self.b2))
+            #         self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d/(self.lr_decay_factor**lr_dec_i), betas=(self.b1, self.b2))
+            #         lr_dec_i += 1
             self.train_one_epoch()
             self.make_stats()
 
@@ -162,7 +162,7 @@ class DCGAN:
                 self.D_x, self.D_G_z1, self.D_G_z2
                 ))
             self.make_chart()
-            self.save_weights()
+        self.save_weights()
 
         self.save_video()
 
@@ -187,14 +187,14 @@ class DCGAN:
         ims = [
             image_with_title(img,
                             "Epoch: {}".format(i),
-                            "[RGAN] batch size: {0}, latent space: {1}, size {2}x{2}".format(self.batch, self.latent, 32))
+                            "[WGAN] batch size: {0}, latent space: {1}, size {2}x{2}".format(self.batch, self.latent, 32))
             for i, img in enumerate(self.img_list)
             ]
         ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
         
         Writer = animation.writers['ffmpeg']
-        writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=3500)
-        ani.save(self.save_folder + 'hist.mp4', writer=writer)
+        writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=3500, codec='mpeg4')
+        ani.save(self.save_folder + self.exp_name +'_hist.mp4', writer=writer)
 
     def save_weights(self):
         g_w = self.gen.state_dict()
@@ -205,3 +205,6 @@ class DCGAN:
     def init_folder(self):
         if not os.path.isdir(self.save_folder):
             os.makedirs(self.save_folder)
+
+    def save_progress_image(self):
+        pass

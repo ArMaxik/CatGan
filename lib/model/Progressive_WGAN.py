@@ -65,8 +65,6 @@ class Progressive_WGAN(WGAN_GP):
         self.real_label = 0.9
         self.fake_label = 0.0
 
-        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
-        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
         self.criterion = nn.BCELoss()
         # self.criterion = nn.MSELoss()
 
@@ -80,9 +78,12 @@ class Progressive_WGAN(WGAN_GP):
 
         self.pbar = tqdm()
 
-        alpha_inc = 1.0 / (self.epochs-1)
 
         while self.cur_isize < self.isize:
+            alpha_inc = 1.0 / (self.epochs-1)
+            self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
+            self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
+
             print(f"train {self.cur_isize}x{self.cur_isize}")
             self.transition = False
             self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
@@ -93,6 +94,10 @@ class Progressive_WGAN(WGAN_GP):
             self.transition = True
             self.gen.add_block()
             self.dis.add_block()
+            
+            self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
+            self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
+
             self.cur_isize *= 2
             self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch, isize=self.cur_isize)
             self.alpha = alpha_inc
@@ -107,6 +112,7 @@ class Progressive_WGAN(WGAN_GP):
             self.gen.end_transition()
             self.dis.end_transition()
 
+            self.epochs = int(self.epochs*1.5)
             # self.make_chart()
             # self.save_weights()
         print("train {}x{}".format(self.cur_isize, self.cur_isize))

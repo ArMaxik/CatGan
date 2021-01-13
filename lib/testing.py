@@ -31,14 +31,14 @@ def image_with_title(img, title_text, info_text):
                     title_text, 
                     fontsize=26)
     title.set_bbox(dict(facecolor='white', alpha=1.0, edgecolor='white'))
-    info = plt.text(0,32*6+22,
+    info = plt.text(0,64*6+22,
                     info_text, 
                     fontsize=14)
     info.set_bbox(dict(facecolor='white', alpha=1.0, edgecolor='white'))
     img_n = plt.imshow(np.transpose(img,(1,2,0)), animated=True);
     return [img_n, title]
 
-dataloader = data.makeCatsDataset(path=DATA_PATH, batch=16, isize=16)
+dataloader = data.makeCatsDataset(path=DATA_PATH, batch=16, isize=64)
 print(f"DATA lenght {len(dataloader)}")
 img_list = []
 for i_batch, im in enumerate(dataloader):
@@ -61,21 +61,27 @@ ims = [
 ani = animation.ArtistAnimation(fig, ims, interval=1500, repeat_delay=1000, blit=True)
 
 Writer = animation.writers['ffmpeg']
-writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=5000)
+writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=5000, codec='mpeg4')
 # ani.save('test.mp4', writer=writer)
 
 
 LATENT = 100
 print("== GAN testing")
-gen = Progressive_Generator(LATENT, device="cuda", device_ids=[0,1,2])
+gen = Progressive_Generator(LATENT, device="cuda", device_ids=[0])
 gen.add_block()
 gen.end_transition()
 gen.add_block()
 
-dis = Progressive_Discriminator(device="cuda", device_ids=[0,1,2])
+dis = Progressive_Discriminator(device="cuda", device_ids=[0])
 dis.add_block()
 dis.end_transition()
 dis.add_block()
+
+print("Gen parametrs")
+for param in gen.parameters():
+    print(param.shape)
+print()
+
 
 print(*gen.layers, sep='\n')
 print(gen.toRGB)
