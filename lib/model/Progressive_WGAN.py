@@ -46,15 +46,7 @@ class Progressive_WGAN(WGAN_GP):
 
         self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch, isize=self.cur_isize)
         self.gen = Progressive_Generator(self.latent, device=self.device, device_ids=self.device_ids)
-        # self.gen.add_block()
-        # self.gen.end_transition()
-        
         self.dis = Progressive_Discriminator(device=self.device, device_ids=self.device_ids)
-        # self.dis.add_block()
-        # self.dis.end_transition()
-
-        # self.gen.apply(weights_init)
-        # self.dis.apply(weights_init)
 
     def setup_train(self):
         self.fixed_noise = torch.randn(36, self.latent, device=self.device)
@@ -80,7 +72,6 @@ class Progressive_WGAN(WGAN_GP):
 
 
         while self.cur_isize < self.isize:
-            alpha_inc = 1.0 / (self.epochs-1)
             self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
             self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
 
@@ -98,6 +89,9 @@ class Progressive_WGAN(WGAN_GP):
             self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
             self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
 
+            self.epochs = int(self.epochs*1.1)
+            alpha_inc = 1.0 / (self.epochs-1)
+
             self.cur_isize *= 2
             self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch, isize=self.cur_isize)
             self.alpha = alpha_inc
@@ -113,15 +107,17 @@ class Progressive_WGAN(WGAN_GP):
             self.dis.end_transition()
 
             self.epochs = int(self.epochs*1.5)
-            # self.make_chart()
-            # self.save_weights()
+            self.make_chart()
         print("train {}x{}".format(self.cur_isize, self.cur_isize))
         self.pbar.reset(total=self.epochs*len(self.dataloader))  # initialise with new `total`
         self.transition = False
+        self.op_gen = torch.optim.Adam(self.gen.parameters(), lr=self.lr_g, betas=(self.b1, self.b2))
+        self.op_dis = torch.optim.Adam(self.dis.parameters(), lr=self.lr_d, betas=(self.b1, self.b2)) 
         for epoch in range(self.epochs):
             self.train_one_epoch()
             self.save_progress_image()
 
+        self.save_weights()
 
         # self.save_video()
 

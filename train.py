@@ -6,8 +6,8 @@ import torch
 
 class options:
     def __init__(self):
-        self.exp_name = "WGAN_05"
-        self.batch = 256
+        self.exp_name = "Progressive_WGAN_02"
+        self.batch = 64
         self.latent = 128
         self.isize = 128
         self.device = torch.device("cuda:1" if (torch.cuda.is_available()) else "cpu")
@@ -16,10 +16,10 @@ class options:
         # self.data_path = "/mnt/p/datasets/cats/"
         self.data_path = "/raid/veliseev/datasets/cats/"
 
-        self.epochs = 3
-        self.lr_d = 0.0004
-        self.lr_g = 0.0004
-        self.lr_decay_epoch = [1000]
+        self.epochs = 30
+        self.lr_d = 0.0001
+        self.lr_g = 0.0001
+        self.lr_decay_epoch = []
         self.lr_decay_factor = 10.0
         self.g_it = 1
         self.d_it = 1
@@ -31,7 +31,7 @@ class options:
 
 opt = options()
 
-gan = WGAN_GP(opt)
+gan = Progressive_WGAN(opt)
 gan.train()
 
 with open("./out/{}/opt.txt".format(opt.exp_name), 'w') as f:

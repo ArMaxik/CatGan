@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 import data
-# from torchsummary import summary
+from torchsummary import summary
 from networks import *
 from misc import *
 
@@ -67,36 +67,35 @@ writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=5000, codec='mpeg4')
 
 LATENT = 100
 print("== GAN testing")
-gen = Progressive_Generator(LATENT, device="cuda", device_ids=[0])
+gen = Progressive_Generator(LATENT, device="cpu", device_ids=[1])
+gen.add_block()
+gen.end_transition()
 gen.add_block()
 gen.end_transition()
 gen.add_block()
 
-dis = Progressive_Discriminator(device="cuda", device_ids=[0])
+dis = Progressive_Discriminator(device="cpu", device_ids=[1])
+dis.add_block()
+dis.end_transition()
 dis.add_block()
 dis.end_transition()
 dis.add_block()
 
-print("Gen parametrs")
-for param in gen.parameters():
-    print(param.shape)
-print()
 
+# print(*gen.layers, sep='\n')
+# print(gen.toRGB)
+# print(gen.toRGB_new)
 
-print(*gen.layers, sep='\n')
-print(gen.toRGB)
-print(gen.toRGB_new)
-
-print()
-print(dis.fromRGB)
-print(dis.fromRGB_new)
-print(*dis.layers, sep='\n')
+# print()
+# print(dis.fromRGB)
+# print(dis.fromRGB_new)
+# print(*dis.layers, sep='\n')
 
 
 print("== Transition testing")
-noise = torch.randn(16, LATENT).cuda()
+noise = torch.randn(16, LATENT).to("cpu")
 data = gen.transition_forward(noise, 0.2)
-dis.transition_forward(data.cuda(), 0.2)
+dis.transition_forward(data.to("cpu"), 0.2)
 
 print("== Normal testing")
 gen.end_transition()
@@ -105,6 +104,6 @@ data = gen(noise).cpu()
 
 torchvision.utils.save_image(data, "test.png", nrow=4, normalize=True)
 
-# print(dis(data.cuda()).detach())
+summary(gen, (3, LATENT), device="cpu")
+summary(dis, (3, 32, 32), device="cpu")
 
-# summary(gen, (3, LATENT))

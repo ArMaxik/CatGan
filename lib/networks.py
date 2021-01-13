@@ -182,7 +182,7 @@ class Progressive_Generator(nn.Module):
         
         self.z = LATENT
         
-        self.nc = 128
+        self.nc = 512
         self.layers = nn.ModuleList([
             nn.ConvTranspose2d(self.z, self.nc, 4, stride=1, padding=0, bias=False).to(self.device),
             nn.BatchNorm2d(self.nc).to(self.device),
@@ -218,7 +218,7 @@ class Progressive_Generator(nn.Module):
 
         self.toRGB_new = nn.Conv2d(self.nc // 2, 3, (1, 1), bias=False).to(self.device)
 
-        for l in self.block:
+        for l in block:
             weights_init(l)
         weights_init(self.toRGB_new)
 
@@ -267,18 +267,18 @@ class Progressive_Discriminator(nn.Module):
         self.device = device
         self.device_ids = device_ids
         
-        self.nc = 128
+        self.nc = 512
         self.layers = nn.ModuleList([
-            # nn.Conv2d(self.nc, self.nc, kernel_size=4, stride=2, padding=1, bias=True).to(self.device),
+            nn.Conv2d(self.nc, 1, kernel_size=4, stride=1, padding=0, bias=True).to(self.device),
             # nn.InstanceNorm2d(self.nc).to(self.device),
             # nn.LeakyReLU(0.2).to(self.device),
-            nn.Conv2d(self.nc, self.nc, kernel_size=(4, 4), stride=1, padding=0, bias=True).to(self.device),
+            # nn.Conv2d(self.nc, 1, kernel_size=4, stride=1, padding=0, bias=True).to(self.device),
             # nn.InstanceNorm2d(self.nc).to(self.device),
-            nn.LeakyReLU(0.2).to(self.device),
+            # nn.LeakyReLU(0.2).to(self.device),
         ])
         self.fromRGB = nn.Conv2d(3, self.nc, (1, 1), bias=True).to(self.device)
         self.lrelu_fromRGB = nn.LeakyReLU(0.2).to(self.device)
-        self.inorm_fromRGB = nn.InstanceNorm2d(self.nc).to(self.device)
+        # self.inorm_fromRGB = nn.InstanceNorm2d(self.nc).to(self.device)
 
         self.block_size = 3
 
@@ -293,7 +293,7 @@ class Progressive_Discriminator(nn.Module):
             self.layers = nn.ModuleList([nn.DataParallel(l, device_ids=self.device_ids) for l in self.layers])
             self.fromRGB = nn.DataParallel(self.fromRGB, device_ids=self.device_ids)
             self.lrelu_fromRGB = nn.DataParallel(self.lrelu_fromRGB, device_ids=self.device_ids)
-            self.inorm_fromRGB = nn.DataParallel(self.inorm_fromRGB, device_ids=self.device_ids)
+            # self.inorm_fromRGB = nn.DataParallel(self.inorm_fromRGB, device_ids=self.device_ids)
 
 
     def add_block(self):
@@ -307,17 +307,17 @@ class Progressive_Discriminator(nn.Module):
             # nn.AvgPool2d(2).to(self.device),
         ])
         self.fromRGB_new = nn.Conv2d(3, self.nc // 2, (1, 1), bias=True).to(self.device)
-        self.inorm_fromRGB_new = nn.InstanceNorm2d(self.nc // 2).to(self.device)
+        # self.inorm_fromRGB_new = nn.InstanceNorm2d(self.nc // 2).to(self.device)
         
-        for l in self.block:
+        for l in block:
             weights_init(l)
         weights_init(self.fromRGB_new)
-        weights_init(self.inorm_fromRGB_new)
+        # weights_init(self.inorm_fromRGB_new)
 
         if len(self.device_ids) > 1 and not (self.device == "cpu"):
             block = nn.ModuleList([nn.DataParallel(l, device_ids=self.device_ids) for l in block])
             self.fromRGB_new = nn.DataParallel(self.fromRGB_new, device_ids=self.device_ids)
-            self.inorm_fromRGB_new = nn.DataParallel(self.inorm_fromRGB_new, device_ids=self.device_ids)
+            # self.inorm_fromRGB_new = nn.DataParallel(self.inorm_fromRGB_new, device_ids=self.device_ids)
 
         
         self.layers = block.extend(self.layers)
@@ -327,13 +327,12 @@ class Progressive_Discriminator(nn.Module):
     def forward(self, x):
         x = self.fromRGB(x)
         x = self.lrelu_fromRGB(x)
-        x = self.inorm_fromRGB(x)
+        # x = self.inorm_fromRGB(x)
 
         for layer in self.layers:
             x = layer(x)
 
         # x = self.linear(x.view(-1, x.shape[1]))
-        
         return x
 
     def transition_forward(self, x, alpha):
@@ -341,11 +340,11 @@ class Progressive_Discriminator(nn.Module):
         x_old = torch.nn.functional.avg_pool2d(x, kernel_size = 2)
         x_old = self.fromRGB(x_old)
         x_old = self.lrelu_fromRGB(x_old)
-        x_old = self.inorm_fromRGB(x_old)
+        # x_old = self.inorm_fromRGB(x_old)
 
         x_new = self.fromRGB_new(x)
         x_new = self.lrelu_fromRGB(x_new)
-        x_new = self.inorm_fromRGB_new(x_new)
+        # x_new = self.inorm_fromRGB_new(x_new)
         for layer in self.layers[:self.block_size]: 
             x_new = layer(x_new)
         
@@ -355,12 +354,11 @@ class Progressive_Discriminator(nn.Module):
             x = layer(x)
 
         # x = self.linear(x.view(-1, x.shape[1]))
-
         return x
     
     def end_transition(self):
         self.fromRGB = self.fromRGB_new
-        self.inorm_fromRGB = self.inorm_fromRGB_new
+        # self.inorm_fromRGB = self.inorm_fromRGB_new
 
 
 def weights_init(m):
@@ -370,115 +368,3 @@ def weights_init(m):
     elif classname.find('BatchNorm') != -1:
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
-
-class Generator_128(nn.Module):
-    def __init__(self, LATENT):
-        super(Generator_128, self).__init__()
-
-        self.z = LATENT
-
-        self.c1 = nn.ConvTranspose2d(self.z, 512, (4, 4), 1, 0, bias=True) # -> 4x4
-        self.b1 = nn.BatchNorm2d(512)
-
-        self.c2 = nn.ConvTranspose2d(512,    256, (4, 4), 2, 1, bias=True) # -> 8x8
-        self.b2 = nn.BatchNorm2d(256)
-
-        self.c3 = nn.ConvTranspose2d(256,    256, (4, 4), 2, 1, bias=True) # -> 16x16
-        self.b3 = nn.BatchNorm2d(256)
-        
-        self.c4 = nn.ConvTranspose2d(256,     128, (4, 4), 2, 1, bias=True) # -> 32x32
-        self.b4 = nn.BatchNorm2d(128)
-        
-        self.c5 = nn.ConvTranspose2d(128,      64, (4, 4), 2, 1, bias=True) # -> 64x64
-        self.b5 = nn.BatchNorm2d(64)
-
-        self.c6 = nn.ConvTranspose2d(64,      3, (4, 4), 2, 1, bias=True) # -> 128x128
-
-        self.drop = nn.Dropout(p=0.01)
-
-    def forward(self, x):
-        x = x.view(-1, self.z, 1, 1)
-    
-        x = self.c1(x)
-        x = self.b1(x)
-        x = F.leaky_relu(x)
-
-        x = self.c2(x)
-        x = self.b2(x)
-        x = F.leaky_relu(x)
-
-        x = self.c3(x)
-        x = self.b3(x)
-        x = F.leaky_relu(x)
-        
-        x = self.c4(x)
-        x = self.b4(x)
-        x = F.leaky_relu(x)
-                
-        x = self.c5(x)
-        x = self.b5(x)
-        x = F.leaky_relu(x)
-
-        x = self.c6(x)
-
-        x = torch.tanh(x)
-        
-        return x
-
-
-class Discriminator_128(nn.Module):
-    def __init__(self):
-        super(Discriminator_128, self).__init__()
-
-        self.c0 = nn.Conv2d(3, 64, 4, 2, padding=1)  # ->64x64
-        self.b0 = nn.BatchNorm2d(64)
-        
-        self.c1 = nn.Conv2d(64, 128, 4, 2, padding=1)  # ->32x32
-        self.b1 = nn.BatchNorm2d(128)
-        
-        self.c2 = nn.Conv2d(128, 128, 3, 1, padding=1)  # ->32x32
-        self.b2 = nn.BatchNorm2d(128)
-
-        self.c3 = nn.Conv2d(128, 256, 4, 2, padding=1)  # ->16x16
-        self.b3 = nn.BatchNorm2d(256)
-        
-        self.c4 = nn.Conv2d(256, 512, 4, 2, padding=1)  # ->8x8
-        self.b4 = nn.BatchNorm2d(512)
-        
-        self.c5 = nn.Conv2d(512, 1, 4, 2, padding=1)  # ->4x4
-        
-
-        self.l1 = nn.Linear(in_features=512*4*4, out_features=1)
-#         self.l2 = nn.Linear(in_features=8*4*4, out_features=1)
-
-        
-        self.drop = nn.Dropout(p=0.3)
-        
-    def forward(self, x):
-        x = self.c0(x)
-        x = self.b0(x)
-        x = F.leaky_relu(x)
-
-        x = self.c1(x)
-        x = self.b1(x)
-        x = F.leaky_relu(x)
-
-        x = self.c2(x)
-        x = self.b2(x)
-        x = F.leaky_relu(x)
-
-        x = self.c3(x)
-        x = self.b3(x)
-        x = F.leaky_relu(x)
-        
-        x = self.c4(x)
-        x = self.b4(x)
-        x = F.leaky_relu(x)
-        
-        x = self.c5(x)
-        x = torch.sigmoid(x)
-        
-        
-        # x = x.view(-1, 512*4*4)
-
-        return x.view(-1)

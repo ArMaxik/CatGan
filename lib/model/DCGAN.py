@@ -108,15 +108,15 @@ class DCGAN:
                 self.train_generator()
 
             self.pbar.update()
-        # self.make_stats()
+        self.make_stats()
         self.make_chart()
         self.save_progress_image()
             
 
     def make_stats(self):
-        with torch.no_grad():
-            fake = self.gen(self.fixed_noise).detach().cpu()
-        self.img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=6))
+        # with torch.no_grad():
+            # fake = self.gen(self.fixed_noise).detach().cpu()
+        # self.img_list.append(vutils.make_grid(fake, padding=2, normalize=True, nrow=6))
 
         self.G_losses.append(self.g_loss.item())
         self.D_losses.append(self.d_loss.item())
@@ -164,7 +164,7 @@ class DCGAN:
             self.make_chart()
         self.save_weights()
 
-        self.save_video()
+        # self.save_video()
 
     def make_chart(self):
         plt.figure(figsize=(10,5))
@@ -194,7 +194,7 @@ class DCGAN:
         
         Writer = animation.writers['ffmpeg']
         writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=3500, codec='mpeg4')
-        ani.save(self.save_folder + self.exp_name +'_hist.mp4', writer=writer)
+        # ani.save(self.save_folder + self.exp_name +'_hist.mp4', writer=writer)
 
     def save_weights(self):
         g_w = self.gen.state_dict()
