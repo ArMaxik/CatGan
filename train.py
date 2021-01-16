@@ -3,10 +3,11 @@ from lib.model.Progressive_WGAN import Progressive_WGAN
 from lib.model.WGAN import WGAN_GP
 
 import torch
+import os
 
 class options:
     def __init__(self):
-        self.exp_name = "Progressive_WGAN_02"
+        self.exp_name = "Progressive_WGAN_03"
         self.batch = 64
         self.latent = 128
         self.isize = 128
@@ -24,16 +25,18 @@ class options:
         self.g_it = 1
         self.d_it = 1
         self.b1 = 0.0
-        self.b2 = 0.9
+        self.b2 = 0.99
         self.noise = False
         self.lambda_coff = 10.0
     
 
 opt = options()
+if not os.path.isdir(f"./out/{opt.exp_name}"):
+    os.makedirs(f"./out/{opt.exp_name}")
+with open(f"./out/{opt.exp_name}/opt.txt", 'w') as f:
+    for (k, v) in opt.__dict__.items():
+        f.write("{:24s}{}\n".format(k, v))
 
 gan = Progressive_WGAN(opt)
 gan.train()
 
-with open("./out/{}/opt.txt".format(opt.exp_name), 'w') as f:
-    for (k, v) in opt.__dict__.items():
-        f.write("{:24s}{}\n".format(k, v))

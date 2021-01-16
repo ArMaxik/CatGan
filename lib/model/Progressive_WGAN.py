@@ -42,6 +42,7 @@ class Progressive_WGAN(WGAN_GP):
         self.b2 = opt.b2
         self.noise = opt.noise
         self.lambda_coff = opt.lambda_coff
+        self.eps_drift = 0.001
         
 
         self.dataloader = makeCatsDataset(path=self.data_path, batch=self.batch, isize=self.cur_isize)
@@ -170,6 +171,7 @@ class Progressive_WGAN(WGAN_GP):
             output_fake = self.dis(imgs_fake).view(-1)
 
         self.d_loss = output_fake.mean() - output_real.mean() + self.gradien_penalty(imgs_real, imgs_fake)
+        self.d_loss += self.eps_drift * torch.mean(output_real ** 2)
         self.d_loss.backward()
 
         self.D_G_z1 = output_fake.mean().item()

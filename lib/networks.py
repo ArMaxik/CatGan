@@ -173,6 +173,29 @@ class Discriminator_WGAN(nn.Module):
         
         return x
 
+class PixelNorm(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.eps = 1e-8
+
+    def forward(self, x):
+        return x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + self.eps)
+
+class MinibatchStd(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.eps = 1e-8
+
+    def forward(self, x):
+        std = x.std(dim=0, unbiased=False).mean()
+        # expand_dim = x.shape
+        # expand_dim[1] = 1
+        std = std.expand((x.shape[0], 1, x.shape[2], x.shape[3]))
+
+        x = torch.cat((x, std), dim=1)
+
+        return x
+
 class Progressive_Generator(nn.Module):
     def __init__(self, LATENT, device="cpu", device_ids=[]):
         super(Progressive_Generator, self).__init__()
@@ -184,16 +207,16 @@ class Progressive_Generator(nn.Module):
         
         self.nc = 512
         self.layers = nn.ModuleList([
-            nn.ConvTranspose2d(self.z, self.nc, 4, stride=1, padding=0, bias=False).to(self.device),
-            nn.BatchNorm2d(self.nc).to(self.device),
+            nn.ConvTranspose2d(self.z, self.nc, kernel_size=4, stride=1, padding=0, bias=True).to(self.device),
+            PixelNorm().to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
-            # nn.ConvTranspose2d(self.nc, self.nc, 3, stride=1, padding=1, bias=False).to(self.device),
-            # nn.BatchNorm2d(self.nc).to(self.device),
-            # nn.LeakyReLU(0.2).to(self.device),
+            nn.Conv2d(self.nc, self.nc, 3, stride=1, padding=1, bias=True).to(self.device),
+            PixelNorm().to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
         ])
-        self.toRGB = nn.Conv2d(self.nc, 3, (1, 1), bias=False).to(self.device)
+        self.toRGB = nn.Conv2d(self.nc, 3, (1, 1), bias=True).to(self.device)
 
-        self.block_size = 4
+        # self.block_size = 4
 
         for l in self.layers:
             weights_init(l)
@@ -206,17 +229,17 @@ class Progressive_Generator(nn.Module):
         
     def add_block(self):
         block = nn.ModuleList([
-            # nn.Upsample(scale_factor=2.0).to(self.device),
-            nn.ConvTranspose2d(self.nc, self.nc // 2, (4, 4), stride=2, padding=1, bias=False).to(self.device),
-            nn.BatchNorm2d(self.nc // 2).to(self.device),
+            nn.Upsample(scale_factor=2.0).to(self.device),
+            nn.Conv2d(self.nc, self.nc // 2, kernel_size=3, stride=1, padding=1, bias=True).to(self.device),
+            PixelNorm().to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
-            # nn.ConvTranspose2d(self.nc // 2, self.nc // 2, (3, 3), stride=1, padding=1, bias=False).to(self.device),
-            # nn.BatchNorm2d(self.nc // 2).to(self.device),
-            # nn.LeakyReLU(0.2).to(self.device),
+            nn.ConvTranspose2d(self.nc // 2, self.nc // 2, (3, 3), stride=1, padding=1, bias=True).to(self.device),
+            PixelNorm().to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
         ])
         self.block_size = len(block)
 
-        self.toRGB_new = nn.Conv2d(self.nc // 2, 3, (1, 1), bias=False).to(self.device)
+        self.toRGB_new = nn.Conv2d(self.nc // 2, 3, (1, 1), bias=True).to(self.device)
 
         for l in block:
             weights_init(l)
@@ -269,18 +292,16 @@ class Progressive_Discriminator(nn.Module):
         
         self.nc = 512
         self.layers = nn.ModuleList([
-            nn.Conv2d(self.nc, 1, kernel_size=4, stride=1, padding=0, bias=True).to(self.device),
-            # nn.InstanceNorm2d(self.nc).to(self.device),
-            # nn.LeakyReLU(0.2).to(self.device),
-            # nn.Conv2d(self.nc, 1, kernel_size=4, stride=1, padding=0, bias=True).to(self.device),
-            # nn.InstanceNorm2d(self.nc).to(self.device),
-            # nn.LeakyReLU(0.2).to(self.device),
+            MinibatchStd().to(self.device),
+            nn.Conv2d(self.nc+1, self.nc, kernel_size=3, stride=1, padding=1, bias=True).to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
+            nn.Conv2d(self.nc, self.nc, kernel_size=4, stride=1, padding=0, bias=True).to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
         ])
         self.fromRGB = nn.Conv2d(3, self.nc, (1, 1), bias=True).to(self.device)
         self.lrelu_fromRGB = nn.LeakyReLU(0.2).to(self.device)
-        # self.inorm_fromRGB = nn.InstanceNorm2d(self.nc).to(self.device)
 
-        self.block_size = 3
+        # self.block_size = 3
 
         self.linear = nn.Linear(in_features = self.nc, out_features = 1).to(self.device)
 
@@ -293,19 +314,18 @@ class Progressive_Discriminator(nn.Module):
             self.layers = nn.ModuleList([nn.DataParallel(l, device_ids=self.device_ids) for l in self.layers])
             self.fromRGB = nn.DataParallel(self.fromRGB, device_ids=self.device_ids)
             self.lrelu_fromRGB = nn.DataParallel(self.lrelu_fromRGB, device_ids=self.device_ids)
-            # self.inorm_fromRGB = nn.DataParallel(self.inorm_fromRGB, device_ids=self.device_ids)
+            self.linear = nn.DataParallel(self.linear, device_ids=self.device_ids)
 
 
     def add_block(self):
         block = nn.ModuleList([
-            nn.Conv2d(self.nc//2, self.nc, kernel_size=4, stride=2, padding=1, bias=True).to(self.device),
-            nn.InstanceNorm2d(self.nc).to(self.device),
+            nn.Conv2d(self.nc//2, self.nc//2, kernel_size=3, stride=1, padding=1, bias=True).to(self.device),
             nn.LeakyReLU(0.2).to(self.device),
-            # nn.Conv2d(self.nc, self.nc, kernel_size=3, stride=1, padding=1, bias=True).to(self.device),
-            # nn.InstanceNorm2d(self.nc).to(self.device),
-            # nn.LeakyReLU(0.2).to(self.device),
-            # nn.AvgPool2d(2).to(self.device),
+            nn.Conv2d(self.nc//2, self.nc, kernel_size=3, stride=1, padding=1, bias=True).to(self.device),
+            nn.LeakyReLU(0.2).to(self.device),
+            nn.AvgPool2d(2).to(self.device),
         ])
+        self.block_size = len(block)
         self.fromRGB_new = nn.Conv2d(3, self.nc // 2, (1, 1), bias=True).to(self.device)
         # self.inorm_fromRGB_new = nn.InstanceNorm2d(self.nc // 2).to(self.device)
         
@@ -332,7 +352,7 @@ class Progressive_Discriminator(nn.Module):
         for layer in self.layers:
             x = layer(x)
 
-        # x = self.linear(x.view(-1, x.shape[1]))
+        x = self.linear(x.view(-1, x.shape[1]))
         return x
 
     def transition_forward(self, x, alpha):
@@ -353,7 +373,7 @@ class Progressive_Discriminator(nn.Module):
         for layer in self.layers[self.block_size:]:
             x = layer(x)
 
-        # x = self.linear(x.view(-1, x.shape[1]))
+        x = self.linear(x.view(-1, x.shape[1]))
         return x
     
     def end_transition(self):
@@ -365,6 +385,7 @@ def weights_init(m):
     classname = m.__class__.__name__
     if classname.find('Conv') != -1:
         nn.init.normal_(m.weight.data, 0.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
     elif classname.find('BatchNorm') != -1:
         nn.init.normal_(m.weight.data, 1.0, 0.02)
         nn.init.constant_(m.bias.data, 0)
